@@ -2,8 +2,10 @@ package models
 
 import (
 	"GinChat/utils"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/viper"
 	"gopkg.in/fatih/set.v0"
@@ -12,22 +14,23 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // 通过在后面加上valid 可以实现验证是否符合规则
 type Message struct {
 	gorm.Model
-	FormId   int64  //发送者
-	TargetId int64  //接受者
-	Type     int    //发送类型  1私聊  2群聊  3心跳
-	Media    int    //消息类型  1文字 2表情包 3语音 4图片 /表情包
-	Content  string //消息内容
-	//CreateTime uint64 //创建时间
-	//ReadTime   uint64 //读取时间
-	Pic    string
-	Url    string
-	Desc   string
-	Amount int //其他数字统计
+	UserId     int64  //发送者
+	TargetId   int64  //接受者
+	Type       int    //发送类型  1私聊  2群聊  3心跳
+	Media      int    //消息类型  1文字 2表情包 3语音 4图片 /表情包
+	Content    string //消息内容
+	CreateTime uint64 //创建时间
+	ReadTime   uint64 //读取时间
+	Pic        string
+	Url        string
+	Desc       string
+	Amount     int //其他数字统计
 }
 
 func (table *Message) TableName() string {
@@ -134,9 +137,41 @@ func sendMsg(userId int64, msg []byte) {
 	rwLock.RLock()
 	node, ok := clientMap[userId]
 	rwLock.RUnlock()
-	if ok {
-		node.DataQueue <- msg
+	jsonMsg := Message{}
+	json.Unmarshal(msg, &jsonMsg)
+	ctx := context.Background()
+	// 接收者
+	targetIdStr := strconv.Itoa(int(userId))
+	// 发送者
+	userIdStr := strconv.Itoa(int(jsonMsg.UserId))
+	jsonMsg.CreateTime = uint64(time.Now().Unix())
+	r, err := utils.Red.Get(ctx, "online_"+userIdStr).Result()
+	if err != nil {
+		fmt.Println(err)
 	}
+	if r != "" {
+		if ok {
+			fmt.Println("sendMsg >>> userId: ", userId, "msg: ", string(msg))
+			node.DataQueue <- msg
+		}
+	}
+	var key string
+	if userId > jsonMsg.UserId {
+		key = "msg_" + userIdStr + "_" + targetIdStr
+	} else {
+		key = "msg_" + targetIdStr + "_" + userIdStr
+	}
+	//命令返回有序集中，指定区间内的成员。
+	res, err := utils.Red.ZRevRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		fmt.Println(err)
+	}
+	score := float64(cap(res)) + 1
+	ress, e := utils.Red.ZAdd(ctx, key, &redis.Z{score, msg}).Result()
+	if e != nil {
+		fmt.Println(e)
+	}
+	fmt.Println(ress)
 }
 
 var udpsendChan chan []byte = make(chan []byte, 1024)
