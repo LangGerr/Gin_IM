@@ -178,6 +178,7 @@ func sendMsg(userId int64, msg []byte) {
 // 需要重写方法 才能完整的将msg转为byte[]
 func (msg Message) MarshalBinary() ([]byte, error) {
 	return json.Marshal(msg)
+
 }
 
 var udpsendChan chan []byte = make(chan []byte, 1024)
