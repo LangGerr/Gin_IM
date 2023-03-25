@@ -10,7 +10,7 @@ func main() {
 	utils.InitMySQL()
 	db := utils.DB
 	// 迁移 schema
-	db.AutoMigrate(models.Community{})
+	db.AutoMigrate(models.Message{})
 	// create
 	//user := &models.UserBasic{Name: "zhangsan"}
 	//db.Create(user)

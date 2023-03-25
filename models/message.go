@@ -134,6 +134,7 @@ func recvProc(node *Node) {
 }
 
 func sendMsg(userId int64, msg []byte) {
+	// 这个userId 指的是targetID
 	rwLock.RLock()
 	node, ok := clientMap[userId]
 	rwLock.RUnlock()
@@ -172,6 +173,11 @@ func sendMsg(userId int64, msg []byte) {
 		fmt.Println(e)
 	}
 	fmt.Println(ress)
+}
+
+// 需要重写方法 才能完整的将msg转为byte[]
+func (msg Message) MarshalBinary() ([]byte, error) {
+	return json.Marshal(msg)
 }
 
 var udpsendChan chan []byte = make(chan []byte, 1024)
